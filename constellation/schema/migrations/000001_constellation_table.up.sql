@@ -1,0 +1,5 @@
+CREATE TABLE constellation (
+  id BOOLEAN PRIMARY KEY DEFAULT TRUE CHECK (id),
+  epoch TIMESTAMPTZ NOT NULL,
+  version BIGINT NOT NULL DEFAULT 1 CHECK (version > 0)
+);

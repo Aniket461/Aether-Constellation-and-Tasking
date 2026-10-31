@@ -1,0 +1,36 @@
+<section class="page">
+  <p class="eyebrow">Orders</p>
+  <h1>Collections</h1>
+  <p class="lead">Each order is one task on a satellite. The constellation reports the work. {{ clock.label() }}</p>
+
+  @if (failed()) {
+    <p class="warn">The order service is not responding.</p>
+  } @else if (orders() === null) {
+    <p class="muted">Loading orders…</p>
+  } @else if (rows().length === 0) {
+    <p class="muted">No orders yet. Task a place, then place the offer.</p>
+  } @else {
+    <table>
+      <thead>
+        <tr>
+          <th>Order id</th>
+          <th>Status</th>
+          <th>Satellite</th>
+          <th>Imaging start</th>
+          <th>Mode</th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (row of rows(); track row.order.id) {
+          <tr [routerLink]="['/orders', row.order.id]">
+            <td class="id">{{ row.order.id }}</td>
+            <td class="status" [attr.data-status]="row.state">{{ label(row.state) }}</td>
+            <td class="sat">{{ row.order.satellite }}</td>
+            <td class="when">{{ row.order.imagingTime.start }}</td>
+            <td class="mode">{{ modeLabel(row.order.imagingMode) }}</td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  }
+</section>

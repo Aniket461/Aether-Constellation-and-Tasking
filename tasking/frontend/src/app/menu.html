@@ -1,0 +1,31 @@
+<button
+  #trigger
+  type="button"
+  class="trigger"
+  [class.open]="open()"
+  [attr.aria-expanded]="open()"
+  [attr.aria-label]="label()"
+  (click)="toggle()"
+>
+  <span>{{ current() }}</span>
+  <svg viewBox="0 0 16 16" aria-hidden="true">
+    <path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
+  </svg>
+</button>
+@if (open()) {
+  <div
+    class="list"
+    [class.up]="flip()"
+    role="listbox"
+    [style.top.px]="flip() ? null : top()"
+    [style.bottom.px]="flip() ? bottom() : null"
+    [style.left.px]="left()"
+    [style.width.px]="width()"
+  >
+    @for (option of options(); track option.id) {
+      <button type="button" class="option" [class.on]="option.id === value()" role="option" (click)="choose(option.id)">
+        {{ option.label }}
+      </button>
+    }
+  </div>
+}

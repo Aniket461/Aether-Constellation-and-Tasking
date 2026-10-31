@@ -1,0 +1,125 @@
+:host {
+  display: block;
+  height: 100%;
+  overflow: auto;
+  background: #0c1116;
+  color: #e7edf2;
+}
+
+.page {
+  width: min(1040px, calc(100% - 80px));
+  margin: 0 auto;
+  padding: 56px 0 64px;
+}
+
+.eyebrow {
+  margin: 0;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #5b7cfa;
+}
+
+h1 {
+  margin: 8px 0 0;
+  font-size: 32px;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+}
+
+.lead,
+.muted,
+.warn {
+  margin: 10px 0 0;
+  color: #9aabb6;
+  line-height: 1.45;
+}
+
+.warn {
+  color: #e7b3a4;
+}
+
+table {
+  width: 100%;
+  margin-top: 36px;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+th,
+td {
+  padding: 14px 18px;
+  border: 0;
+  text-align: left;
+  font-weight: 400;
+}
+
+th {
+  padding-bottom: 10px;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #8b9bab;
+}
+
+td {
+  border-top: 1px solid #1c262e;
+}
+
+tbody tr {
+  cursor: pointer;
+}
+
+tbody tr:hover td {
+  background: #141c24;
+}
+
+tbody tr:focus-visible td {
+  background: #141c24;
+  outline: none;
+}
+
+.id,
+.when,
+.mode {
+  color: #c5d0d8;
+  font-variant-numeric: tabular-nums;
+}
+
+.id {
+  white-space: nowrap;
+}
+
+.sat {
+  font-weight: 500;
+}
+
+.status {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.status[data-status='scheduled'] {
+  color: #8aa4ff;
+}
+
+.status[data-status='imaging'] {
+  color: #e2b340;
+}
+
+.status[data-status='downlink'] {
+  color: #6ec8e0;
+}
+
+.status[data-status='processing'] {
+  color: #c9a0ff;
+}
+
+.status[data-status='done'] {
+  color: #7dcea0;
+}
+
+.status[data-status='cancelled'],
+.status[data-status='failed'] {
+  color: #9aabb6;
+}

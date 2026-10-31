@@ -1,0 +1,30 @@
+<div class="shell">
+  <nav class="rail">
+    <a routerLink="/tasking" routerLinkActive="on">
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <circle cx="12" cy="12" r="7" fill="none" stroke="currentColor" stroke-width="1.7" />
+        <circle cx="12" cy="12" r="1.6" fill="currentColor" />
+        <path d="M12 2.5v3.2M12 18.3v3.2M2.5 12h3.2M18.3 12h3.2" fill="none" stroke="currentColor" stroke-width="1.7" />
+      </svg>
+      <span>Tasking</span>
+    </a>
+    <a routerLink="/orders" routerLinkActive="on">
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M5 6.5h14M5 12h14M5 17.5h9" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" />
+      </svg>
+      <span>Orders</span>
+    </a>
+    <a routerLink="/satellite" routerLinkActive="on">
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <rect x="2" y="8" width="6" height="8" rx="1" fill="currentColor" />
+        <rect x="16" y="8" width="6" height="8" rx="1" fill="currentColor" />
+        <rect x="8" y="10.5" width="8" height="3" fill="currentColor" />
+        <rect x="10" y="6" width="4" height="12" rx="1" fill="currentColor" />
+      </svg>
+      <span>Orbits</span>
+    </a>
+  </nav>
+  <main>
+    <router-outlet />
+  </main>
+</div>

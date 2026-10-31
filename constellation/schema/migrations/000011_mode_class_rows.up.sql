@@ -1,0 +1,17 @@
+INSERT INTO mode_classes (mode, class) VALUES
+  ('SPOTLIGHT', 'Standard'),
+  ('SPOTLIGHT', 'Fine'),
+  ('SPOTLIGHT', 'Dwell'),
+  ('SPOTLIGHT_FINE', 'Fine'),
+  ('SPOTLIGHT_EXTENDED_AREA', 'Fine'),
+  ('SPOTLIGHT_EXTENDED_DWELL', 'Dwell'),
+  ('SPOTLIGHT_EXTENDED_DWELL_FINE', 'Dwell'),
+  ('SPOTLIGHT_EXTENDED_DWELL_PRECISE', 'Dwell'),
+  ('STRIPMAP', 'Standard'),
+  ('STRIPMAP', 'Fine'),
+  ('STRIPMAP', 'Dwell'),
+  ('STRIPMAP', 'Wide'),
+  ('SCAN', 'Standard'),
+  ('SCAN', 'Fine'),
+  ('SCAN', 'Wide'),
+  ('SCAN_WIDE', 'Wide');

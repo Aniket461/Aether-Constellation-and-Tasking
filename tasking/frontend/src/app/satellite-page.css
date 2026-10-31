@@ -1,0 +1,101 @@
+:host {
+  display: block;
+  height: 100%;
+}
+
+.shell {
+  position: relative;
+  height: 100%;
+}
+
+app-globe {
+  position: absolute;
+  inset: 0;
+}
+
+aside {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  width: 280px;
+  max-height: calc(100% - 32px);
+  overflow: auto;
+  padding: 16px;
+  border-radius: 12px;
+  background: rgb(12 17 22 / 82%);
+  box-sizing: border-box;
+}
+
+h1 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 500;
+}
+
+.time {
+  margin: 4px 0 12px;
+  font-variant-numeric: tabular-nums;
+  color: #c5d0d8;
+}
+
+.note {
+  margin: 0 0 8px;
+  color: #c5d0d8;
+}
+
+.warn {
+  color: #e7b3a4;
+}
+
+ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+li {
+  display: grid;
+  grid-template-columns: 16px 1fr auto;
+  gap: 8px;
+  align-items: center;
+  padding: 6px 4px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+li.on {
+  background: #24303a;
+}
+
+.swatch {
+  width: 16px;
+  height: 16px;
+  mask: url('/satellite.svg') center / contain no-repeat;
+  -webkit-mask: url('/satellite.svg') center / contain no-repeat;
+}
+
+.meta {
+  color: #9aabb6;
+  font-size: 12px;
+}
+
+dl {
+  display: grid;
+  gap: 4px;
+  margin: 12px 0 0;
+}
+
+dl div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+dt {
+  color: #9aabb6;
+}
+
+dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}

@@ -1,0 +1,927 @@
+openapi: 3.0.3
+info:
+  title: Aether Constellation API
+  version: 1.0.0
+  description: |
+    The fleet catalog and where each satellite is.
+
+    The catalog is loaded from Postgres. A change to planes, classes, imaging modes,
+    mode classes, or satellites increments `version`. These routes read that catalog.
+
+    `POST /api/acquisitions` is the earliest free collection for a point. It reads the
+    `tasks` table and writes nothing. `POST /api/tasks` finds that collection and stores
+    the task in one transaction. `POST /api/tasks/query` returns tasks a caller already
+    has, with current status. `POST /api/tasks/{id}/cancel` marks the task cancelled.
+    This service does not store orders. Tasking stores the order and keeps the task id.
+
+    Local: http://127.0.0.1:8081
+servers:
+  - url: http://127.0.0.1:8081
+    description: Local process
+  - url: http://localhost:8081
+    description: Docker Compose host port
+
+tags:
+  - name: Catalog
+  - name: Acquisition
+  - name: Ephemeris
+
+paths:
+  /api/acquisitions:
+    post:
+      tags: [Acquisition]
+      summary: Earliest acquisition
+      description: |
+        The soonest collection that passes the fleet rules for this point, window, and mode.
+        Incidence, look side, pass direction, squint, mode duration, and which class can fly
+        the mode are decided here. Scheduled, imaging, downlink, processing, and done tasks are skipped. Cancelled
+        and failed tasks are not. A collection that ends
+        at T and another that starts at T do not overlap. The window is at most 7 days.
+      operationId: earliestAcquisition
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AcquisitionRequest"
+            example:
+              pointOfInterest:
+                lat: 38.7223
+                lon: -9.1393
+              acquisitionWindow:
+                start: "2026-10-29T00:00:00Z"
+                end: "2026-10-30T00:00:00Z"
+              imagingMode: SPOTLIGHT
+              lookSide: ANY
+              passDirection: ANY
+              incidence: performant
+      responses:
+        "200":
+          description: The earliest collection, or feasible false when nothing matches
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Acquisition"
+              examples:
+                lisbonSpot:
+                  summary: Lisbon Spot with Aether-A1 free
+                  value:
+                    feasible: true
+                    satellite: Aether-A1
+                    plane: Dawn
+                    class: Standard
+                    imagingTime:
+                      start: "2026-10-29T06:06:51Z"
+                      end: "2026-10-29T06:07:01Z"
+                    durationSeconds: 10
+                    incidenceAngle: 26.11761924392991
+                    lookSide: RIGHT
+                    passDirection: ASCENDING
+                    squintDeg: 0.40014241726119165
+                none:
+                  summary: Nothing in the window
+                  value:
+                    feasible: false
+        "400":
+          description: The request is not a valid acquisition question
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error: unknown imaging mode
+        "500":
+          description: The catalog could not be read
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error: catalog unavailable
+
+  /api/tasks:
+    post:
+      tags: [Acquisition]
+      summary: Create a task for the earliest collection
+      description: |
+        Finds the earliest free collection and inserts a task in one transaction.
+        The same `clientRef` returns the task already stored for it. The exclusion
+        constraint rejects a second busy task on that satellite for an overlapping interval.
+        Cancelled and failed tasks do not occupy the satellite.
+      operationId: createTask
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TaskRequest"
+            example:
+              pointOfInterest:
+                lat: 38.7223
+                lon: -9.1393
+              acquisitionWindow:
+                start: "2026-10-29T00:00:00Z"
+                end: "2026-10-30T00:00:00Z"
+              imagingMode: SPOTLIGHT
+              lookSide: ANY
+              passDirection: ANY
+              incidence: performant
+              clientRef: a1b2c3d4e5f60718
+      responses:
+        "200":
+          description: The task and the collection it locked
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Task"
+              example:
+                id: c0ffee00c0ffee00
+                clientRef: a1b2c3d4e5f60718
+                status: done
+                createdAt: "2026-10-31T12:00:00Z"
+                cancelledAt: null
+                satellite: Aether-A1
+                plane: Dawn
+                class: Standard
+                pointOfInterest:
+                  lat: 38.7223
+                  lon: -9.1393
+                imagingMode: SPOTLIGHT
+                lookSide: ANY
+                passDirection: ANY
+                incidence: performant
+                acquisitionWindow:
+                  start: "2026-10-29T00:00:00Z"
+                  end: "2026-10-30T00:00:00Z"
+                imagingTime:
+                  start: "2026-10-29T06:06:51Z"
+                  end: "2026-10-29T06:07:01Z"
+                durationSeconds: 10
+                incidenceAngle: 26.11761924392991
+                computedLookSide: RIGHT
+                computedPass: ASCENDING
+                squintDeg: 0.40014241726119165
+        "400":
+          description: The request is not a valid acquisition question
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error: unknown imaging mode
+        "409":
+          description: No free satellite can take the picture
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error: not feasible
+        "500":
+          description: The task could not be stored
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error: could not store the task
+
+  /api/tasks/query:
+    post:
+      tags: [Acquisition]
+      summary: Current status of known tasks
+      description: |
+        Returns the tasks whose ids were sent. Status is current at the time of the call.
+        Unknown ids are omitted.
+      operationId: queryTasks
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ids]
+              properties:
+                ids:
+                  type: array
+                  items:
+                    type: string
+            example:
+              ids: [c0ffee00c0ffee00]
+      responses:
+        "200":
+          description: The matching tasks
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Task"
+        "500":
+          description: The tasks could not be read
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error: could not read tasks
+
+  /api/tasks/{id}/cancel:
+    post:
+      tags: [Acquisition]
+      summary: Cancel a task
+      description: |
+        Sets status to cancelled and records cancelledAt. The row stays.
+        A task that is already done or failed is refused. Cancelling a task that is
+        already cancelled returns that task.
+      operationId: cancelTask
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          example: c0ffee00c0ffee00
+      responses:
+        "200":
+          description: The cancelled task
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Task"
+        "404":
+          description: No task has that id
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error: task not found
+        "409":
+          description: The task has already finished
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error: already finished
+        "500":
+          description: The task could not be cancelled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error: could not cancel the task
+
+  /api/catalog/version:
+    get:
+      tags: [Catalog]
+      summary: Catalog version
+      description: |
+        The seeded fleet is version 1. An update to a mode, class, plane, or satellite makes it 2.
+        Constellation reloads the in-memory catalog when this number changes.
+      operationId: getCatalogVersion
+      responses:
+        "200":
+          description: Current catalog version
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CatalogVersion"
+              example:
+                version: 1
+        "500":
+          $ref: "#/components/responses/CatalogUnavailable"
+
+  /api/catalog:
+    get:
+      tags: [Catalog]
+      summary: Full catalog
+      description: |
+        Planes, classes, imaging modes, and satellites, including both TLE lines.
+        The acquisition search reads this catalog inside the constellation process.
+        The orbits page does not use this route.
+      operationId: getCatalog
+      responses:
+        "200":
+          description: The fleet
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Catalog"
+              example:
+                version: 1
+                epoch: "2026-10-29T00:00:00Z"
+                planes:
+                  - name: Dawn
+                    color: "#7eb6ff"
+                    periodMin: 95.03
+                classes:
+                  - name: Standard
+                    incidenceMin: 15
+                    incidenceMax: 40
+                modes:
+                  - id: SPOTLIGHT
+                    label: Spot
+                    seconds: 10
+                    rangeKm: 5
+                    azimuthKm: 5
+                    performMin: 20
+                    performMax: 40
+                    requestMin: 10
+                    requestMax: 45
+                    classes: [Dwell, Fine, Standard]
+                satellites:
+                  - name: Aether-A1
+                    catalog: 95001
+                    plane: Dawn
+                    class: Standard
+                    look: right
+                    line1: "1 95001U 26001A   26302.00000000  .00000000  00000-0  10000-4 0    16"
+                    line2: "2 95001  97.4778 123.2760 0010000  90.0000   0.0000 15.15322385    16"
+        "500":
+          $ref: "#/components/responses/CatalogUnavailable"
+
+  /api/modes:
+    get:
+      tags: [Catalog]
+      summary: Imaging modes
+      description: |
+        The modes the tasking dropdown shows. Scene size is `rangeKm` by `azimuthKm`.
+        `classes` lists who can fly the mode. The seeded fleet has nine modes.
+      operationId: listModes
+      responses:
+        "200":
+          description: Imaging modes, ordered by sort order
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Mode"
+              example:
+                - id: SPOTLIGHT
+                  label: Spot
+                  seconds: 10
+                  rangeKm: 5
+                  azimuthKm: 5
+                  performMin: 20
+                  performMax: 40
+                  requestMin: 10
+                  requestMax: 45
+                  classes: [Dwell, Fine, Standard]
+                - id: SCAN_WIDE
+                  label: Scan Wide
+                  seconds: 42
+                  rangeKm: 200
+                  azimuthKm: 300
+                  performMin: 21
+                  performMax: 26
+                  requestMin: 21
+                  requestMax: 26
+                  classes: [Wide]
+        "500":
+          $ref: "#/components/responses/CatalogUnavailable"
+
+  /api/satellites:
+    get:
+      tags: [Catalog]
+      summary: Public roster
+      description: Planes and satellites for the orbits page. TLE lines are left out.
+      operationId: listSatellites
+      responses:
+        "200":
+          description: Epoch, planes, and the twelve satellites
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Roster"
+              example:
+                epoch: "2026-10-29T00:00:00Z"
+                planes:
+                  - name: Dawn
+                    color: "#7eb6ff"
+                    periodMin: 95.03
+                  - name: Morning
+                    color: "#e2b340"
+                    periodMin: 95.44
+                  - name: Afternoon
+                    color: "#e07a5f"
+                    periodMin: 95.86
+                  - name: Dusk
+                    color: "#7dcea0"
+                    periodMin: 94.72
+                satellites:
+                  - name: Aether-A1
+                    catalog: 95001
+                    plane: Dawn
+                    class: Standard
+                    look: right
+                  - name: Aether-C2
+                    catalog: 95008
+                    plane: Afternoon
+                    class: Dwell
+                    look: either
+        "500":
+          $ref: "#/components/responses/CatalogUnavailable"
+
+  /api/ephemeris:
+    get:
+      tags: [Ephemeris]
+      summary: Positions over a window
+      description: |
+        Propagated positions for every satellite. The window is at most 6 hours.
+        `stepSeconds` is from 5 to 60. Times are UTC.
+      operationId: getEphemeris
+      parameters:
+        - $ref: "#/components/parameters/from"
+        - $ref: "#/components/parameters/to"
+        - $ref: "#/components/parameters/stepSeconds"
+      responses:
+        "200":
+          description: One track per satellite
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Ephemeris"
+              example:
+                from: "2026-10-31T14:00:00Z"
+                to: "2026-10-31T14:01:00Z"
+                stepSeconds: 20
+                satellites:
+                  - name: Aether-A1
+                    samples:
+                      - t: "2026-10-31T14:00:00Z"
+                        latDeg: 12.4
+                        lonDeg: -40.2
+                        altKm: 520.1
+                        ecefX: 4200.0
+                        ecefY: -3100.0
+                        ecefZ: 4800.0
+                      - t: "2026-10-31T14:00:20Z"
+                        latDeg: 13.1
+                        lonDeg: -39.6
+                        altKm: 520.2
+                        ecefX: 4250.0
+                        ecefY: -3050.0
+                        ecefZ: 4850.0
+        "400":
+          description: |
+            Plain text. One of: `from must be RFC3339`, `to must be RFC3339`,
+            `to must be after from`, `window must be 6 hours or less`,
+            `stepSeconds must be from 5 to 60`.
+          content:
+            text/plain:
+              schema:
+                type: string
+              example: "stepSeconds must be from 5 to 60\n"
+        "500":
+          $ref: "#/components/responses/CatalogUnavailable"
+
+components:
+  parameters:
+    from:
+      name: from
+      in: query
+      required: true
+      description: Window start, RFC3339 UTC.
+      schema:
+        type: string
+        format: date-time
+      example: "2026-10-31T14:00:00Z"
+    to:
+      name: to
+      in: query
+      required: true
+      description: Window end, RFC3339 UTC. Must be after `from` and at most 6 hours later.
+      schema:
+        type: string
+        format: date-time
+      example: "2026-10-31T18:00:00Z"
+    stepSeconds:
+      name: stepSeconds
+      in: query
+      required: true
+      description: Seconds between samples. Integer from 5 to 60.
+      schema:
+        type: integer
+        minimum: 5
+        maximum: 60
+      example: 20
+
+  responses:
+    CatalogUnavailable:
+      description: The catalog could not be read. Body is plain text.
+      content:
+        text/plain:
+          schema:
+            type: string
+          example: "catalog unavailable\n"
+
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+
+    AcquisitionRequest:
+      type: object
+      required: [pointOfInterest, acquisitionWindow, imagingMode]
+      properties:
+        pointOfInterest:
+          $ref: "#/components/schemas/Point"
+        acquisitionWindow:
+          $ref: "#/components/schemas/TimeSpan"
+        imagingMode:
+          type: string
+          description: Mode id from the catalog, such as SPOTLIGHT.
+          example: SPOTLIGHT
+        lookSide:
+          type: string
+          description: Omitted means ANY.
+          enum: [ANY, LEFT, RIGHT]
+          default: ANY
+        passDirection:
+          type: string
+          description: Omitted means ANY.
+          enum: [ANY, ASCENDING, DESCENDING]
+          default: ANY
+        incidence:
+          type: string
+          description: |
+            performant uses the mode's performant incidence band.
+            widest uses the widest band. Omitted means performant.
+            The band is then intersected with what that satellite's class can steer.
+          enum: [performant, widest]
+          default: performant
+    TaskRequest:
+      allOf:
+        - $ref: "#/components/schemas/AcquisitionRequest"
+        - type: object
+          properties:
+            clientRef:
+              type: string
+              description: |
+                The caller's name for this task. Tasking sends the order id it is about to store.
+                Sending the same value again returns the existing task.
+              example: a1b2c3d4e5f60718
+
+    Task:
+      type: object
+      required: [id, status, createdAt, satellite, plane, class, imagingTime, durationSeconds, incidenceAngle, computedLookSide, computedPass, squintDeg]
+      properties:
+        id:
+          type: string
+          description: 16 hex characters, generated by the constellation.
+          example: c0ffee00c0ffee00
+        clientRef:
+          type: string
+          example: a1b2c3d4e5f60718
+        status:
+          type: string
+          enum: [scheduled, imaging, downlink, processing, done, cancelled, failed]
+        createdAt:
+          type: string
+          format: date-time
+        cancelledAt:
+          type: string
+          format: date-time
+          nullable: true
+        satellite:
+          type: string
+          example: Aether-A1
+        plane:
+          type: string
+          example: Dawn
+        class:
+          type: string
+          example: Standard
+        pointOfInterest:
+          $ref: "#/components/schemas/Point"
+        imagingMode:
+          type: string
+          example: SPOTLIGHT
+        lookSide:
+          type: string
+          description: The side the caller asked for.
+          enum: [ANY, LEFT, RIGHT]
+        passDirection:
+          type: string
+          description: The pass the caller asked for.
+          enum: [ANY, ASCENDING, DESCENDING]
+        incidence:
+          type: string
+          enum: [performant, widest]
+        acquisitionWindow:
+          $ref: "#/components/schemas/TimeSpan"
+        imagingTime:
+          $ref: "#/components/schemas/TimeSpan"
+        durationSeconds:
+          type: integer
+          example: 10
+        incidenceAngle:
+          type: number
+          example: 26.12
+        computedLookSide:
+          type: string
+          enum: [LEFT, RIGHT]
+        computedPass:
+          type: string
+          enum: [ASCENDING, DESCENDING]
+        squintDeg:
+          type: number
+          example: 0.4
+
+    Acquisition:
+      oneOf:
+        - $ref: "#/components/schemas/AcquisitionOffer"
+        - $ref: "#/components/schemas/NotFeasible"
+
+    AcquisitionOffer:
+      type: object
+      required: [feasible, satellite, plane, class, imagingTime, durationSeconds, incidenceAngle, lookSide, passDirection, squintDeg]
+      properties:
+        feasible:
+          type: boolean
+          enum: [true]
+        satellite:
+          type: string
+          example: Aether-A1
+        plane:
+          type: string
+          example: Dawn
+        class:
+          type: string
+          example: Standard
+        imagingTime:
+          $ref: "#/components/schemas/TimeSpan"
+        durationSeconds:
+          type: integer
+          description: How long the mode holds the satellite.
+          example: 10
+        incidenceAngle:
+          type: number
+          description: Degrees from vertical at the collection.
+          example: 26.12
+        lookSide:
+          type: string
+          description: The side the satellite actually looks.
+          enum: [LEFT, RIGHT]
+        passDirection:
+          type: string
+          description: The pass the satellite is actually on.
+          enum: [ASCENDING, DESCENDING]
+        squintDeg:
+          type: number
+          description: Degrees off broadside. A collection is kept only when this is within 1 degree.
+          example: 0.4
+
+    NotFeasible:
+      type: object
+      required: [feasible]
+      properties:
+        feasible:
+          type: boolean
+          enum: [false]
+
+    Point:
+      type: object
+      required: [lat, lon]
+      properties:
+        lat:
+          type: number
+          minimum: -90
+          maximum: 90
+          example: 38.7223
+        lon:
+          type: number
+          minimum: -180
+          maximum: 180
+          example: -9.1393
+
+    TimeSpan:
+      type: object
+      required: [start, end]
+      properties:
+        start:
+          type: string
+          format: date-time
+        end:
+          type: string
+          format: date-time
+
+    CatalogVersion:
+      type: object
+      required: [version]
+      properties:
+        version:
+          type: integer
+          format: int64
+          example: 1
+
+    Catalog:
+      type: object
+      required: [version, epoch, planes, classes, modes, satellites]
+      properties:
+        version:
+          type: integer
+          format: int64
+        epoch:
+          type: string
+          format: date-time
+          description: TLE epoch. Fixed at 2026-10-29T00:00:00Z for the seeded fleet.
+        planes:
+          type: array
+          items:
+            $ref: "#/components/schemas/Plane"
+        classes:
+          type: array
+          items:
+            $ref: "#/components/schemas/Class"
+        modes:
+          type: array
+          items:
+            $ref: "#/components/schemas/Mode"
+        satellites:
+          type: array
+          items:
+            $ref: "#/components/schemas/Satellite"
+
+    Plane:
+      type: object
+      required: [name, color, periodMin]
+      properties:
+        name:
+          type: string
+          example: Dawn
+        color:
+          type: string
+          description: Hex color used on the globe.
+          example: "#7eb6ff"
+        periodMin:
+          type: number
+          description: Orbital period in minutes.
+          example: 95.03
+
+    Class:
+      type: object
+      required: [name, incidenceMin, incidenceMax]
+      properties:
+        name:
+          type: string
+          enum: [Standard, Fine, Dwell, Wide]
+        incidenceMin:
+          type: number
+          description: Closest to straight down this bus can steer, in degrees.
+          example: 15
+        incidenceMax:
+          type: number
+          description: Farthest this bus can steer, in degrees.
+          example: 40
+
+    Mode:
+      type: object
+      required: [id, label, seconds, rangeKm, azimuthKm, performMin, performMax, requestMin, requestMax, classes]
+      properties:
+        id:
+          type: string
+          example: SPOTLIGHT
+        label:
+          type: string
+          example: Spot
+        seconds:
+          type: integer
+          description: How long one collection holds the satellite.
+          example: 10
+        rangeKm:
+          type: number
+          example: 5
+        azimuthKm:
+          type: number
+          example: 5
+        performMin:
+          type: number
+          description: Low edge of the performant incidence band, degrees.
+          example: 20
+        performMax:
+          type: number
+          example: 40
+        requestMin:
+          type: number
+          description: Low edge of the widest incidence band a caller can ask for, degrees.
+          example: 10
+        requestMax:
+          type: number
+          example: 45
+        classes:
+          type: array
+          items:
+            type: string
+          description: Classes that can fly this mode. Sorted by class name.
+          example: [Dwell, Fine, Standard]
+
+    Satellite:
+      allOf:
+        - $ref: "#/components/schemas/RosterSatellite"
+        - type: object
+          required: [line1, line2]
+          properties:
+            line1:
+              type: string
+              description: TLE line 1.
+            line2:
+              type: string
+              description: TLE line 2.
+
+    Roster:
+      type: object
+      required: [epoch, planes, satellites]
+      properties:
+        epoch:
+          type: string
+          format: date-time
+        planes:
+          type: array
+          items:
+            $ref: "#/components/schemas/Plane"
+        satellites:
+          type: array
+          items:
+            $ref: "#/components/schemas/RosterSatellite"
+
+    RosterSatellite:
+      type: object
+      required: [name, catalog, plane, class, look]
+      properties:
+        name:
+          type: string
+          example: Aether-A1
+        catalog:
+          type: integer
+          description: NORAD-style catalog number.
+          example: 95001
+        plane:
+          type: string
+          example: Dawn
+        class:
+          type: string
+          example: Standard
+        look:
+          type: string
+          description: Which side of the ground track this satellite can image.
+          enum: [right, left, either]
+          example: right
+
+    Ephemeris:
+      type: object
+      required: [from, to, stepSeconds, satellites]
+      properties:
+        from:
+          type: string
+          format: date-time
+        to:
+          type: string
+          format: date-time
+        stepSeconds:
+          type: integer
+        satellites:
+          type: array
+          items:
+            $ref: "#/components/schemas/Track"
+
+    Track:
+      type: object
+      required: [name, samples]
+      properties:
+        name:
+          type: string
+          example: Aether-A1
+        samples:
+          type: array
+          items:
+            $ref: "#/components/schemas/Sample"
+
+    Sample:
+      type: object
+      required: [t, latDeg, lonDeg, altKm, ecefX, ecefY, ecefZ]
+      properties:
+        t:
+          type: string
+          format: date-time
+        latDeg:
+          type: number
+        lonDeg:
+          type: number
+          description: Longitude in degrees, from -180 to 180.
+        altKm:
+          type: number
+        ecefX:
+          type: number
+          description: Earth-fixed X, kilometres.
+        ecefY:
+          type: number
+        ecefZ:
+          type: number

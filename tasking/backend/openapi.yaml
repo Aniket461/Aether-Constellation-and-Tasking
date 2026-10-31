@@ -1,0 +1,566 @@
+openapi: 3.0.3
+info:
+  title: Aether Tasking API
+  version: 1.0.0
+  description: |
+    Feasibility and orders for the Aether Tasking Portal.
+
+    Tasking does not calculate the collection and does not decide whether a satellite
+    is free. Feasibility calls the constellation `POST /api/acquisitions`, which reads
+    the task table. Placing an order calls `POST /api/tasks`, then stores a snapshot
+    plus the task id and the status the constellation returned. Cancel calls
+    `POST /api/tasks/{id}/cancel`, then stores the status it returns. The order row
+    does not point at constellation catalog tables.
+
+    Order status is stored. It is the last status the constellation reported.
+    `scheduled` before imaging, `imaging` during the collection, then `downlink`
+    and `processing` for the waits configured on the constellation, then `done`.
+    `cancelled` when a portal cancels before imaging ends. `failed` if the
+    constellation says the task failed. Once a second, tasking asks for every order
+    still scheduled, imaging, downlink, or processing and copies those statuses.
+    The imaging interval is half-open. Start is inclusive and end is exclusive.
+
+    Local: http://127.0.0.1:8080
+servers:
+  - url: http://127.0.0.1:8080
+    description: Local process
+  - url: http://localhost:8080
+    description: Docker Compose host port
+
+tags:
+  - name: Feasibility
+  - name: Orders
+
+paths:
+  /api/feasibility:
+    post:
+      tags: [Feasibility]
+      summary: Earliest feasible collection
+      description: |
+        Asks the constellation for the soonest collection that matches the request.
+        The constellation skips satellites that already have a busy task. A collection that
+        ends at T and another that starts at T do not overlap. The window is at most 7 days.
+      operationId: checkFeasibility
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ImagingRequest"
+            example:
+              pointOfInterest:
+                lat: 38.7223
+                lon: -9.1393
+              acquisitionWindow:
+                start: "2026-10-29T00:00:00Z"
+                end: "2026-10-30T00:00:00Z"
+              imagingMode: SPOTLIGHT
+              lookSide: ANY
+              passDirection: ANY
+              incidence: performant
+      responses:
+        "200":
+          description: >
+            An offer when a collection exists. The body is only
+            {"feasible": false} when nothing matches.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Feasibility"
+              examples:
+                lisbonSpot:
+                  summary: Lisbon Spot, no other orders
+                  value:
+                    feasible: true
+                    satellite: Aether-A1
+                    plane: Dawn
+                    class: Standard
+                    imagingTime:
+                      start: "2026-10-29T06:06:51Z"
+                      end: "2026-10-29T06:07:01Z"
+                    durationSeconds: 10
+                    incidenceAngle: 26.11761924392991
+                    lookSide: RIGHT
+                    passDirection: ASCENDING
+                    squintDeg: 0.40014241726119165
+                none:
+                  summary: Nothing in the window
+                  value:
+                    feasible: false
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "500":
+          $ref: "#/components/responses/StoreError"
+        "503":
+          $ref: "#/components/responses/CatalogDown"
+
+  /api/orders:
+    get:
+      tags: [Orders]
+      summary: List orders
+      description: Newest first. Status is the stored constellation status.
+      operationId: listOrders
+      responses:
+        "200":
+          description: Orders, or an empty array
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Order"
+              example:
+                - id: a1b2c3d4e5f60718
+                  taskId: c0ffee00c0ffee00
+                  createdAt: "2026-10-31T12:00:00Z"
+                  cancelledAt: null
+                  status: done
+                  satellite: Aether-A1
+                  plane: Dawn
+                  class: Standard
+                  pointOfInterest:
+                    lat: 38.7223
+                    lon: -9.1393
+                  imagingMode: SPOTLIGHT
+                  lookSide: ANY
+                  passDirection: ANY
+                  incidence: performant
+                  acquisitionWindow:
+                    start: "2026-10-29T00:00:00Z"
+                    end: "2026-10-30T00:00:00Z"
+                  imagingTime:
+                    start: "2026-10-29T06:06:51Z"
+                    end: "2026-10-29T06:07:01Z"
+                  durationSeconds: 10
+                  incidenceAngle: 26.12
+                  computedLookSide: RIGHT
+                  computedPass: ASCENDING
+                  squintDeg: 0.4
+        "500":
+          $ref: "#/components/responses/StoreError"
+    post:
+      tags: [Orders]
+      summary: Place an order
+      description: |
+        Calls `POST /api/tasks` with a new order id as `clientRef`. The constellation
+        stores the task for the earliest free satellite and returns it. Tasking then
+        stores the snapshot and that status. If the insert fails and the task is still
+        scheduled or imaging, tasking cancels it. A task in downlink, processing, or done stays.
+      operationId: createOrder
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ImagingRequest"
+            example:
+              pointOfInterest:
+                lat: 38.7223
+                lon: -9.1393
+              acquisitionWindow:
+                start: "2026-10-29T00:00:00Z"
+                end: "2026-10-30T00:00:00Z"
+              imagingMode: SPOTLIGHT
+              lookSide: ANY
+              passDirection: ANY
+              incidence: performant
+      responses:
+        "200":
+          description: The stored order
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Order"
+              example:
+                id: a1b2c3d4e5f60718
+                taskId: c0ffee00c0ffee00
+                createdAt: "2026-10-31T12:00:00Z"
+                cancelledAt: null
+                status: done
+                satellite: Aether-A1
+                plane: Dawn
+                class: Standard
+                pointOfInterest:
+                  lat: 38.7223
+                  lon: -9.1393
+                imagingMode: SPOTLIGHT
+                lookSide: ANY
+                passDirection: ANY
+                incidence: performant
+                acquisitionWindow:
+                  start: "2026-10-29T00:00:00Z"
+                  end: "2026-10-30T00:00:00Z"
+                imagingTime:
+                  start: "2026-10-29T06:06:51Z"
+                  end: "2026-10-29T06:07:01Z"
+                durationSeconds: 10
+                incidenceAngle: 26.11761924392991
+                computedLookSide: RIGHT
+                computedPass: ASCENDING
+                squintDeg: 0.40014241726119165
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "409":
+          description: No satellite can take the picture
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error: not feasible
+        "500":
+          $ref: "#/components/responses/StoreError"
+        "503":
+          $ref: "#/components/responses/CatalogDown"
+
+  /api/orders/{id}:
+    get:
+      tags: [Orders]
+      summary: One order
+      operationId: getOrder
+      parameters:
+        - $ref: "#/components/parameters/orderId"
+      responses:
+        "200":
+          description: The order
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Order"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/StoreError"
+
+  /api/orders/{id}/cancel:
+    post:
+      tags: [Orders]
+      summary: Cancel an order
+      description: |
+        Asks the constellation to cancel the task, then stores the status it returns.
+        A task in downlink, processing, done, or failed cannot be cancelled, and that row stays
+        so that second is not offered again.
+      operationId: cancelOrder
+      parameters:
+        - $ref: "#/components/parameters/orderId"
+      responses:
+        "200":
+          description: The cancelled order
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Order"
+              example:
+                id: a1b2c3d4e5f60718
+                taskId: c0ffee00c0ffee00
+                createdAt: "2026-10-29T00:01:00Z"
+                cancelledAt: "2026-10-29T01:00:00Z"
+                status: cancelled
+                satellite: Aether-A1
+                plane: Dawn
+                class: Standard
+                pointOfInterest:
+                  lat: 38.7223
+                  lon: -9.1393
+                imagingMode: SPOTLIGHT
+                lookSide: ANY
+                passDirection: ANY
+                incidence: performant
+                acquisitionWindow:
+                  start: "2026-10-29T00:00:00Z"
+                  end: "2026-10-30T00:00:00Z"
+                imagingTime:
+                  start: "2026-10-29T06:06:51Z"
+                  end: "2026-10-29T06:07:01Z"
+                durationSeconds: 10
+                incidenceAngle: 26.12
+                computedLookSide: RIGHT
+                computedPass: ASCENDING
+                squintDeg: 0.4
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: The imaging interval has already ended
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error: already finished
+        "500":
+          $ref: "#/components/responses/StoreError"
+
+components:
+  parameters:
+    orderId:
+      name: id
+      in: path
+      required: true
+      description: 16 hex characters.
+      schema:
+        type: string
+        pattern: "^[0-9a-f]{16}$"
+      example: a1b2c3d4e5f60718
+
+  responses:
+    BadRequest:
+      description: |
+        The body is not a valid imaging request. `error` is one of:
+        `request body must be JSON`, `point of interest is out of range`,
+        `window start must be RFC3339`, `window end must be RFC3339`,
+        `window must be at most 7 days`, `unknown imaging mode`,
+        `look side must be ANY, LEFT, or RIGHT`,
+        `pass direction must be ANY, ASCENDING, or DESCENDING`,
+        `incidence must be performant or widest`.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error: unknown imaging mode
+    NotFound:
+      description: No order has this id
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error: not found
+    StoreError:
+      description: The orders table could not be read or written
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          examples:
+            read:
+              value:
+                error: could not read orders
+            write:
+              value:
+                error: could not store the order
+    CatalogDown:
+      description: Tasking has no constellation catalog to search with
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error: constellation catalog is unavailable
+
+  schemas:
+    ImagingRequest:
+      type: object
+      required: [pointOfInterest, acquisitionWindow, imagingMode]
+      properties:
+        pointOfInterest:
+          $ref: "#/components/schemas/Point"
+        acquisitionWindow:
+          $ref: "#/components/schemas/TimeSpan"
+        imagingMode:
+          type: string
+          description: Mode id from the constellation catalog, such as `SPOTLIGHT`.
+          example: SPOTLIGHT
+        lookSide:
+          type: string
+          description: Omitted means `ANY`.
+          enum: [ANY, LEFT, RIGHT]
+          default: ANY
+        passDirection:
+          type: string
+          description: Omitted means `ANY`.
+          enum: [ANY, ASCENDING, DESCENDING]
+          default: ANY
+        incidence:
+          type: string
+          description: |
+            `performant` uses the mode's performant incidence band.
+            `widest` uses the widest band. Omitted means `performant`.
+            The band is then intersected with what that satellite's class can steer.
+          enum: [performant, widest]
+          default: performant
+
+    Feasibility:
+      oneOf:
+        - $ref: "#/components/schemas/Offer"
+        - $ref: "#/components/schemas/NotFeasible"
+
+    Offer:
+      type: object
+      required:
+        - feasible
+        - satellite
+        - plane
+        - class
+        - imagingTime
+        - durationSeconds
+        - incidenceAngle
+        - lookSide
+        - passDirection
+        - squintDeg
+      properties:
+        feasible:
+          type: boolean
+          enum: [true]
+        satellite:
+          type: string
+          example: Aether-A1
+        plane:
+          type: string
+          example: Dawn
+        class:
+          type: string
+          example: Standard
+        imagingTime:
+          $ref: "#/components/schemas/TimeSpan"
+        durationSeconds:
+          type: integer
+          description: Copied from the mode at search time.
+          example: 10
+        incidenceAngle:
+          type: number
+          description: Degrees from the vertical at the collection.
+          example: 26.12
+        lookSide:
+          type: string
+          description: The side the satellite actually looks. This is the computed side, not the request.
+          enum: [LEFT, RIGHT]
+        passDirection:
+          type: string
+          description: The pass the satellite is actually on.
+          enum: [ASCENDING, DESCENDING]
+        squintDeg:
+          type: number
+          description: Degrees off broadside. A collection is kept only when this is within 1 degree.
+          example: 0.4
+
+    NotFeasible:
+      type: object
+      required: [feasible]
+      properties:
+        feasible:
+          type: boolean
+          enum: [false]
+
+    Order:
+      type: object
+      required:
+        - id
+        - taskId
+        - createdAt
+        - cancelledAt
+        - status
+        - satellite
+        - plane
+        - class
+        - pointOfInterest
+        - imagingMode
+        - lookSide
+        - passDirection
+        - incidence
+        - acquisitionWindow
+        - imagingTime
+        - durationSeconds
+        - incidenceAngle
+        - computedLookSide
+        - computedPass
+        - squintDeg
+      properties:
+        id:
+          type: string
+          description: 16 hex characters.
+          example: a1b2c3d4e5f60718
+        taskId:
+          type: string
+          description: The constellation task for this order.
+          example: c0ffee00c0ffee00
+        createdAt:
+          type: string
+          format: date-time
+        cancelledAt:
+          type: string
+          format: date-time
+          nullable: true
+        status:
+          type: string
+          description: The last status the constellation reported. Stored on the order.
+          enum: [scheduled, imaging, downlink, processing, done, cancelled, failed]
+        satellite:
+          type: string
+          description: Snapshot of the satellite name at booking time.
+        plane:
+          type: string
+        class:
+          type: string
+        pointOfInterest:
+          $ref: "#/components/schemas/Point"
+        imagingMode:
+          type: string
+          description: Snapshot of the mode id.
+          example: SPOTLIGHT
+        lookSide:
+          type: string
+          description: What the caller asked for.
+          enum: [ANY, LEFT, RIGHT]
+        passDirection:
+          type: string
+          description: What the caller asked for.
+          enum: [ANY, ASCENDING, DESCENDING]
+        incidence:
+          type: string
+          description: Which band the caller asked for.
+          enum: [performant, widest]
+        acquisitionWindow:
+          $ref: "#/components/schemas/TimeSpan"
+        imagingTime:
+          allOf:
+            - $ref: "#/components/schemas/TimeSpan"
+          description: Half-open interval the satellite is held for.
+        durationSeconds:
+          type: integer
+        incidenceAngle:
+          type: number
+        computedLookSide:
+          type: string
+          description: The side the search computed.
+          enum: [LEFT, RIGHT]
+        computedPass:
+          type: string
+          description: The pass the search computed.
+          enum: [ASCENDING, DESCENDING]
+        squintDeg:
+          type: number
+
+    Point:
+      type: object
+      required: [lat, lon]
+      properties:
+        lat:
+          type: number
+          minimum: -90
+          maximum: 90
+          example: 38.7223
+        lon:
+          type: number
+          minimum: -180
+          maximum: 180
+          example: -9.1393
+
+    TimeSpan:
+      type: object
+      required: [start, end]
+      properties:
+        start:
+          type: string
+          format: date-time
+          description: RFC3339 UTC. Fractional seconds are accepted.
+        end:
+          type: string
+          format: date-time
+
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string

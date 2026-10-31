@@ -1,0 +1,3 @@
+CREATE TRIGGER planes_version
+  AFTER INSERT OR UPDATE OR DELETE ON planes
+  FOR EACH STATEMENT EXECUTE FUNCTION bump_catalog_version();

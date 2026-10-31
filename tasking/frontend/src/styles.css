@@ -1,0 +1,13 @@
+html,
+body {
+  height: 100%;
+  margin: 0;
+  background: #0c1116;
+  color: #e7edf2;
+  font-family: "Segoe UI", sans-serif;
+}
+
+app-root {
+  display: block;
+  height: 100%;
+}

@@ -1,0 +1,66 @@
+<form (submit)="$event.preventDefault(); check()">
+  <p class="eyebrow">Tasking</p>
+  <h1>Point at a place.</h1>
+  <p class="lead">
+    Click the globe to set the point of interest. The red rectangle is the picture this mode would take. A larger mode covers more ground around the same point.
+  </p>
+
+  <label for="place">Place</label>
+  <input id="place" [value]="place()" readonly />
+
+  <label for="start">Window start, UTC</label>
+  <input id="start" type="datetime-local" [value]="windowStart()" (input)="windowStart.set(asText($event))" />
+
+  <label for="end">Window end, UTC</label>
+  <input id="end" type="datetime-local" [value]="windowEnd()" (input)="windowEnd.set(asText($event))" />
+
+  <label>Imaging mode</label>
+  <app-menu label="Imaging mode" [value]="modeId()" [options]="modeOptions()" (picked)="modeId.set($event)" />
+  <p class="hint">{{ mode().rangeKm }} × {{ mode().azimuthKm }} km scene</p>
+
+  <label>Incidence</label>
+  <app-menu label="Incidence" [value]="incidence()" [options]="incidenceOptions" (picked)="setIncidence($event)" />
+  <p class="hint">{{ incidenceText() }} for {{ mode().label }}</p>
+
+  <label>Look side</label>
+  <app-menu label="Look side" [value]="look()" [options]="lookOptions" (picked)="look.set($event)" />
+
+  <label>Pass direction</label>
+  <app-menu label="Pass direction" [value]="pass()" [options]="passOptions" (picked)="pass.set($event)" />
+
+  <div class="actions">
+    <button class="primary" type="submit" [disabled]="busy()">
+      {{ busy() ? 'Searching…' : 'Check earliest time' }}
+    </button>
+    <button class="ghost" type="button" (click)="reset()">Reset</button>
+  </div>
+  @if (offer(); as found) {
+    <section class="offer">
+      <p class="offer-title">{{ found.satellite }}</p>
+      <p>{{ found.plane }} · {{ found.class }}</p>
+      <p>Imaging {{ found.imagingTime?.start }} to {{ found.imagingTime?.end }}</p>
+      <p>
+        {{ found.incidenceAngle?.toFixed(2) }}° incidence · {{ found.lookSide }} · {{ found.passDirection }} · squint
+        {{ found.squintDeg?.toFixed(3) }}°
+      </p>
+      <button class="primary" type="button" [disabled]="busy()" (click)="placeOrder()">Place order</button>
+    </section>
+  }
+  @if (imaging.failed()) {
+    <p class="notice">Imaging modes could not be loaded.</p>
+  }
+  @if (notice()) {
+    <p class="notice">{{ notice() }}</p>
+  }
+</form>
+<div class="map">
+  <app-tasking-globe
+    [poi]="poi()"
+    [rangeKm]="mode().rangeKm"
+    [azimuthKm]="mode().azimuthKm"
+    (picked)="pick($event)"
+  />
+  @if (!poi()) {
+    <p class="map-hint">Click the globe to set the place</p>
+  }
+</div>

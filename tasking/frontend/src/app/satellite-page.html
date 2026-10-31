@@ -1,0 +1,31 @@
+<div class="shell">
+  <app-globe />
+  <aside>
+    <header>
+      <h1>Aether</h1>
+      <p class="time">{{ clock.label() }}</p>
+    </header>
+    @if (orbits.status() === 'loading') {
+      <p class="note">Loading orbits…</p>
+    }
+    @if (orbits.status() === 'error') {
+      <p class="note warn">The orbit service is not responding.</p>
+    }
+    <ul>
+      @for (sat of orbits.tracks() ?? []; track sat.name) {
+        <li [class.on]="orbits.selected() === sat.name" (click)="orbits.selected.set(sat.name)">
+          <span class="swatch" [style.background]="orbits.color(sat.plane)"></span>
+          <span class="name">{{ sat.name }}</span>
+          <span class="meta">{{ sat.plane }}</span>
+        </li>
+      }
+    </ul>
+    @if (orbits.readout(); as place) {
+      <dl>
+        <div><dt>Latitude</dt><dd>{{ place.lat }}</dd></div>
+        <div><dt>Longitude</dt><dd>{{ place.lon }}</dd></div>
+        <div><dt>Altitude</dt><dd>{{ place.alt }}</dd></div>
+      </dl>
+    }
+  </aside>
+</div>

@@ -1,0 +1,11 @@
+CREATE TABLE planes (
+  name TEXT PRIMARY KEY,
+  color TEXT NOT NULL,
+  period_min DOUBLE PRECISION NOT NULL CHECK (period_min > 0),
+  altitude_km DOUBLE PRECISION NOT NULL,
+  inclination_deg DOUBLE PRECISION NOT NULL,
+  raan_deg DOUBLE PRECISION NOT NULL,
+  mean_motion DOUBLE PRECISION NOT NULL,
+  ltan TEXT NOT NULL,
+  sort_order INTEGER NOT NULL UNIQUE
+);

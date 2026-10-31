@@ -1,0 +1,56 @@
+name: aether
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: aether
+      POSTGRES_PASSWORD: aether
+      POSTGRES_DB: aether
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aether -d aether"]
+      interval: 2s
+      timeout: 5s
+      retries: 20
+
+  constellation:
+    build: ./constellation
+    environment:
+      DATABASE_URL: postgres://aether:aether@postgres:5432/constellation?sslmode=disable
+      TASK_DOWNLINK_DELAY: 15s
+      TASK_PROCESSING_DELAY: 20s
+    ports:
+      - "8081:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  tasking:
+    build:
+      context: .
+      dockerfile: tasking/backend/Dockerfile
+    environment:
+      DATABASE_URL: postgres://aether:aether@postgres:5432/tasking?sslmode=disable
+      CONSTELLATION_URL: http://constellation:8080
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      constellation:
+        condition: service_started
+
+  frontend:
+    build: ./tasking/frontend
+    ports:
+      - "4200:80"
+    depends_on:
+      - tasking
+      - constellation
+
+volumes:
+  pgdata:

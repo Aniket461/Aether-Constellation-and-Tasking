@@ -1,0 +1,81 @@
+<section class="page">
+  @if (failed() && !order()) {
+    <button type="button" class="back" routerLink="/orders">
+      <svg viewBox="0 0 16 16" aria-hidden="true">
+        <path d="M7.5 3.5 3 8l4.5 4.5M3.5 8H13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      All orders
+    </button>
+    <p class="warn">{{ failed() }}</p>
+  } @else if (!order()) {
+    <p class="muted">Loading order…</p>
+  } @else if (order(); as item) {
+    <header>
+      <div>
+        <button type="button" class="back" routerLink="/orders">
+          <svg viewBox="0 0 16 16" aria-hidden="true">
+            <path d="M7.5 3.5 3 8l4.5 4.5M3.5 8H13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          All orders
+        </button>
+        <p class="eyebrow">{{ item.id }}</p>
+        <p class="sub">{{ item.plane }} · {{ item.class }} · {{ modeLabel(item.imagingMode) }} · {{ clock.label() }}</p>
+      </div>
+      @if (state() === 'scheduled' || state() === 'imaging') {
+        <button type="button" (click)="cancel()">Cancel order</button>
+      }
+    </header>
+
+    <ol class="steps" [class.cancelled]="state() === 'cancelled' || state() === 'failed'" [style.--fill]="stepIndex() / (steps.length - 1)">
+      @for (step of steps; track step.id; let i = $index) {
+        <li
+          [class.lit]="i <= stepIndex()"
+          [class.now]="i === stepIndex()"
+          [class.live]="i === stepIndex() && state() !== 'done' && state() !== 'cancelled' && state() !== 'failed'"
+        >
+          <span class="craft">{{ i === stepIndex() ? item.satellite : '' }}</span>
+          <span class="mark">
+            <span class="dot"></span>
+            <span class="sat" aria-hidden="true"></span>
+          </span>
+          <span class="name">{{ step.label }}</span>
+        </li>
+      }
+    </ol>
+    @if (state() === 'cancelled') {
+      <p class="cancelled">Cancelled {{ item.cancelledAt }}</p>
+    }
+    @if (state() === 'failed') {
+      <p class="cancelled">Failed</p>
+    }
+
+    <div class="cards">
+      <article>
+        <h2>Collection</h2>
+        <div class="facts">
+          <p><span>Place</span><strong>{{ item.pointOfInterest.lat.toFixed(4) }}°, {{ item.pointOfInterest.lon.toFixed(4) }}°</strong></p>
+          <p><span>Duration</span><strong>{{ item.durationSeconds }} s</strong></p>
+          <p><span>Imaging start</span><strong>{{ item.imagingTime.start }}</strong></p>
+          <p><span>Imaging end</span><strong>{{ item.imagingTime.end }}</strong></p>
+          <p><span>Window</span><strong>{{ item.acquisitionWindow.start }} → {{ item.acquisitionWindow.end }}</strong></p>
+          <p><span>Created</span><strong>{{ item.createdAt }}</strong></p>
+        </div>
+      </article>
+      <article>
+        <h2>Geometry</h2>
+        <div class="facts">
+          <p><span>Incidence</span><strong>{{ item.incidenceAngle.toFixed(2) }}°</strong></p>
+          <p><span>Squint</span><strong>{{ item.squintDeg.toFixed(3) }}°</strong></p>
+          <p><span>Look side</span><strong>{{ item.computedLookSide }}</strong></p>
+          <p><span>Pass</span><strong>{{ item.computedPass }}</strong></p>
+          <p><span>Requested look</span><strong>{{ item.lookSide }}</strong></p>
+          <p><span>Requested pass</span><strong>{{ item.passDirection }}</strong></p>
+          <p><span>Incidence band</span><strong>{{ item.incidence }}</strong></p>
+        </div>
+      </article>
+    </div>
+    @if (failed()) {
+      <p class="warn">{{ failed() }}</p>
+    }
+  }
+</section>
